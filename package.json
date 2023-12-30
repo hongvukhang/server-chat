@@ -1,0 +1,30 @@
+{
+  "name": "server-chat",
+  "version": "1.0.0",
+  "description": "demo-chatbox",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js"
+  },
+  "author": "Vu khang",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "firebase": "^10.7.1",
+    "firebase-admin": "^12.0.0",
+    "google-auth-library": "^9.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "mailgun-js": "^0.22.0",
+    "mongoose": "^8.0.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.7",
+    "nodemailer-sendgrid-transport": "^0.2.0",
+    "nodemon": "^3.0.2",
+    "path": "^0.12.7",
+    "socket.io": "^4.7.2"
+  }
+}
