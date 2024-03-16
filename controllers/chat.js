@@ -112,6 +112,10 @@ exports.disConnectedUser = async (userName) => {
     status: false,
     time_out_of: new Date(),
   };
+  user.timeOfAccess.timeLogout = new Date();
+  user.timeOfAccess.totalTime =
+    (new Date() - new Date(user.timeOfAccess.timeLogin)) / (60 * 60 * 1000);
+
   await user
     .save()
     .then((result) => {})

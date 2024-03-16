@@ -1,6 +1,6 @@
 const { initializeApp } = require("firebase/app");
 const { getStorage } = require("firebase/storage");
-
+require("dotenv").config();
 const firebaseConfig = {
   apiKey: "AIzaSyAOdNTHieVa1Q146RS115oGfgp_FUBfvdg",
   authDomain: "storage-images-89cf3.firebaseapp.com",

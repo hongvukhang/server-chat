@@ -1,20 +1,20 @@
 const nodemailer = require("nodemailer");
-
+require("dotenv").config();
 const transporter = nodemailer.createTransport({
   // config mail server
   service: "Gmail",
   auth: {
-    user: "hongvukhang1@gmail.com",
-    pass: "vvlm lpxg oyhg wsth",
+    user: process.env.USER_EMAIL,
+    pass: process.env.EMAIL_PASSWORD,
   },
 });
+// send message email
 exports.sendEmail = async (email, otp, subject) => {
-  console.log(email);
   const mainOptions = {
     // thiết lập đối tượng, nội dung gửi mail
-    from: "hongvukhang1@gmail.com",
+    from: process.env.USER_EMAIL,
     to: email,
-    subject: subject, //"Register Email"
+    subject: subject,
     text: subject,
     html: `<style>
            body {

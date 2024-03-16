@@ -22,4 +22,6 @@ router.post(
   userController.changeAvatar
 );
 router.post("/new-password", userController.newPassword);
+router.post("/change-password", authMiddleWare, userController.changePassword);
+router.get("/get-admin", authMiddleWare, userController.getAdmin);
 module.exports = router;

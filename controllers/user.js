@@ -4,7 +4,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 const upload = require("../utils/upload");
-
+const { formatName } = require("../utils/removeVietnameseTones");
+require("dotenv").config();
 //register
 exports.createUser = async (req, res, next) => {
   const { userName, password, email, otp } = req.body;
@@ -21,16 +22,30 @@ exports.createUser = async (req, res, next) => {
   const link = req.files.map((file) => {
     return upload.upload(file);
   });
+
   const user = new User({
     userName: userName,
     name: userName,
     password: password,
+    connecting: {
+      status: false,
+      time_out_of: new Date(),
+    },
+    baned: false,
+    role: "user",
+    timeOfAccess: {
+      timeLogin: null,
+      timeLogout: null,
+      totalTime: 0,
+    },
     avatar: await link[0],
     idSocket: null,
     email: email,
     createAt: new Date(),
     listAvatar: [await link[0]],
+    msgs: [],
   });
+  console.log(user);
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(user.password, salt);
   await user
@@ -58,11 +73,18 @@ exports.postLogin = async (req, res, next) => {
         userId: user._id.toString(),
         userName: user.userName,
       },
-      "somesupersecrettoken"
+      process.env.JWT_SIGNATURE
       // ,
       // { expiresIn: "2h" }
     );
-    res.status(200).json({ token: token, userName: user.userName });
+    user.timeOfAccess.timeLogin = new Date();
+    await user.save();
+    res.status(200).json({
+      token: token,
+      userName: user.userName,
+      name: user.name,
+      avatar: user.avatar,
+    });
   } catch (error) {
     console.log(error);
   }
@@ -111,15 +133,20 @@ exports.getUser = async (req, res) => {
 
 //search user
 exports.searchUser = async (req, res) => {
-  const name = req.params.userName;
-  const user = await User.find({ name: name });
+  const nameReq = req.params.userName;
+  const name = formatName(nameReq);
+
+  const user = await User.find();
   const dataResponce = user
+    .filter((u) => {
+      const nameUser = formatName(u.name);
+      return nameUser.includes(name);
+    })
     .map((u) => ({
       avatar: u.avatar,
       userName: u.name,
       idUser: u._id,
-    }))
-    .filter((u) => u.idUser.toString() !== req.userId.toString());
+    }));
   res.status(200).json(dataResponce);
 };
 
@@ -166,7 +193,11 @@ exports.changeAvatar = async (req, res) => {
       user.listAvatar = list;
     }
     await user.save().then(() => {
-      res.status(201).json({ msg: "Success" });
+      res.status(201).json({
+        msg: "Success",
+        listAvatar: user.listAvatar,
+        avatar: user.avatar,
+      });
     });
   } catch (error) {
     res.status(500).json({ msg: "Failure" });
@@ -178,11 +209,16 @@ exports.newPassword = async (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
   const passwordComfirm = req.body.passwordComfirm;
+  const otp = req.body.otp;
+  const emailAuth = await EmailAuth.findOne({ email: email });
 
   if (password !== passwordComfirm)
     return res
       .status(412)
       .json({ msg: "Confirmation password is different from password" });
+
+  if (otp !== emailAuth.otp)
+    return res.status(408).json({ msg: "OTP is incorrect" });
 
   const user = await User.findOne({ email: email });
   const salt = await bcrypt.genSalt(10);
@@ -190,8 +226,43 @@ exports.newPassword = async (req, res) => {
 
   await user
     .save()
-    .then((result) => {
+    .then(async (result) => {
+      res.status(201).json({ msg: "Change the password successfully" });
+      await EmailAuth.deleteOne({ email: email });
+    })
+    .catch((err) => {
+      res.status(500).json({ msg: "Something is wrong!" });
+    });
+};
+//new password had been authenticated
+exports.changePassword = async (req, res) => {
+  const oldPassword = req.body.oldPassword;
+  const newPassword = req.body.newPassword;
+  const user = await User.findById(req.userId);
+  if (!bcrypt.compareSync(oldPassword, user.password))
+    return res.status(400).json({ msg: "old password" });
+
+  if (newPassword.length < 8)
+    return res.status(400).json({ msg: "new password" });
+
+  const salt = await bcrypt.genSalt(10);
+  user.password = await bcrypt.hash(newPassword, salt);
+
+  await user
+    .save()
+    .then(() => {
       res.status(201).json({ msg: "success" });
     })
-    .catch((err) => {});
+    .catch((err) => {
+      res.status(400).json({ msg: "Password change failed " });
+    });
+};
+exports.getAdmin = async (req, res) => {
+  const admin = await User.findOne({ userName: "admin" });
+  const data = {
+    avatar: admin.avatar,
+    userName: admin.name,
+    idUser: admin._id,
+  };
+  res.status(200).json(data);
 };

@@ -11,7 +11,6 @@ module.exports = (req, res, next) => {
   try {
     decoded = jwt.verify(token, process.env.JWT_SIGNATURE);
   } catch (err) {
-    res.status(401).json({ msg: "Not authenticationed" });
     throw err;
   }
 
@@ -19,6 +18,9 @@ module.exports = (req, res, next) => {
     const error = new Error("Not authenticationed.");
 
     throw error;
+  }
+  if (decoded.role !== "admin") {
+    return res.status(402).json({ msg: "Not authoziration" });
   }
   req.userId = decoded.userId;
   next();

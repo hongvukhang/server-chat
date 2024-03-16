@@ -14,6 +14,7 @@ function generateOTP() {
 //send otp
 async function sendOTP(res, email, subject) {
   const otp = generateOTP();
+
   const emailAuth = new EmailAuth({
     email: email,
     otp: otp,
@@ -54,7 +55,7 @@ exports.emailAuth = async (req, res) => {
 exports.otpPassword = async (req, res) => {
   const userName = req.body.userName;
   const user = await User.findOne({ userName: userName });
-  if (!user) return res.status(404).json({ msg: "username not found!" });
+  if (!user) return res.status(404).json({ msg: "Username not found!" });
   sendOTP(res, user.email, "Forgot Password");
 };
 // validate otp

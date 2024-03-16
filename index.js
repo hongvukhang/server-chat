@@ -1,5 +1,6 @@
 const express = require("express");
 const moongoose = require("mongoose");
+require("dotenv").config();
 const cors = require("cors");
 const User = require("./model/messages");
 const chatController = require("./controllers/chat");
@@ -8,6 +9,7 @@ const app = express();
 const userRouter = require("./routes/user");
 const messageRouter = require("./routes/message");
 const emailRouter = require("./routes/emailAuthentication");
+const adminRouter = require("./routes/admin");
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cors());
@@ -15,11 +17,9 @@ app.use(cors());
 app.use("/", userRouter);
 app.use("/chat", messageRouter);
 app.use("/email", emailRouter);
-
+app.use("/admin", adminRouter);
 moongoose
-  .connect(
-    "mongodb+srv://khanghvfx17345:IBR9NwJ3lwdaWMhD@cluster0.5jq4ht4.mongodb.net/demo-chat?retryWrites=true&w=majority"
-  )
+  .connect(process.env.MONGODB_URI)
   .then(() => {
     const server = app.listen(5000);
     const io = require("./socket").init(server);

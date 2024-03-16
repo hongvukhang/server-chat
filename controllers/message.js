@@ -31,20 +31,12 @@ exports.getChat = async (req, res) => {
 exports.getSendMessage = async (req, res) => {
   const user_friend = req.params.userId;
   const userId = req.userId;
+  const user1 = await User.findById(userId);
+  const user2 = await User.findById(user_friend);
+  const exist = user1.msgs.filter((msg) => user2.msgs.includes(msg));
 
-  const message = await Messages.find();
-
-  const messageFilter = message.filter((user) => {
-    return (
-      (user.idUser1.toString() === userId.toString() ||
-        user.idUser1.toString() === user_friend.toString()) &&
-      (user.idUser2.toString() === userId.toString() ||
-        user.idUser2.toString() === user_friend.toString())
-    );
-  });
-
-  if (messageFilter.length > 0) {
-    res.status(200).json(messageFilter[0]._id);
+  if (exist.length > 0) {
+    res.status(200).json(exist[0]);
   } else {
     const msg = new Messages({
       idUser1: { _id: userId, seen: true },
@@ -53,13 +45,10 @@ exports.getSendMessage = async (req, res) => {
       messages: [],
     });
     await msg.save().then(async (result) => {
-      const user = await User.findById(userId);
-      const userF = await User.findById(user_friend);
-      user.msgs.push(result._id);
-      userF.msgs.push(result._id);
-      await user.save();
-      await userF.save();
-
+      user1.msgs.push(result._id);
+      user2.msgs.push(result._id);
+      await user1.save();
+      await user2.save();
       res.status(200).json(result._id);
     });
   }
