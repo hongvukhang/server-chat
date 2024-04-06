@@ -1,10 +1,13 @@
-const User = require("../model/user");
-const EmailAuth = require("../model/authentication-email");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
+const io = require("../socket");
+const User = require("../model/user");
 const upload = require("../utils/upload");
+const Messages = require("../model/messages");
+const EmailAuth = require("../model/authentication-email");
 const { formatName } = require("../utils/removeVietnameseTones");
+
 require("dotenv").config();
 //register
 exports.createUser = async (req, res, next) => {
@@ -15,9 +18,13 @@ exports.createUser = async (req, res, next) => {
   const valUserName = await User.findOne({ userName: userName });
 
   if (!emailModel || emailModel.otp !== otp)
-    return res.status(480).json({ msg: "otp" });
-  if (valEmail) return res.status(400).json({ msg: "email" });
-  if (valUserName) return res.status(400).json({ msg: "userName" });
+    return res.status(480).json({ msg: "OTP is incorrect", title: "otp" });
+  if (valEmail)
+    return res.status(400).json({ msg: "Email has been used", title: "email" });
+  if (valUserName)
+    return res
+      .status(400)
+      .json({ msg: "User Name has been used", title: "userName" });
 
   const link = req.files.map((file) => {
     return upload.upload(file);
@@ -44,6 +51,8 @@ exports.createUser = async (req, res, next) => {
     createAt: new Date(),
     listAvatar: [await link[0]],
     msgs: [],
+    friends: [],
+    deleted: false,
   });
   console.log(user);
   const salt = await bcrypt.genSalt(10);
@@ -63,11 +72,22 @@ exports.postLogin = async (req, res, next) => {
   try {
     const user = await User.findOne({ userName: userName });
     if (!user) {
-      return res.status(401).json({ msg: "user name" });
+      return res
+        .status(401)
+        .json({ msg: "User does not exist", title: "user name" });
+    }
+    if (user.deleted) {
+      return res.status(404).json({ msg: "User does not exist" });
     }
     if (!bcrypt.compareSync(password, user.password)) {
-      return res.status(401).json({ msg: "password" });
+      return res
+        .status(401)
+        .json({ msg: "Incorrect password", title: "password" });
     }
+    if (user.baned)
+      return res
+        .status(401)
+        .json({ msg: "Users have been banned from logging in" });
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -93,37 +113,50 @@ exports.postLogin = async (req, res, next) => {
 //get chat list
 exports.getChatList = async (req, res) => {
   const user = await User.findById(req.userId);
-  const userMessage = await user.populate("msgs");
+  const userMessage = user.msgs;
 
-  const msgs = userMessage.msgs
-    .map((li) => {
-      return {
-        _id: li._id,
-        create: li.createAt,
-        user:
-          li.idUser1._id.toString() !== req.userId.toString()
-            ? li.idUser1._id
-            : li.idUser2._id,
-        messages: li.messages[li.messages.length - 1],
-        seened:
-          li.idUser1._id.toString() !== req.userId.toString()
-            ? li.idUser1.seen
-            : li.idUser2.seen,
-      };
-    })
-    .sort((a, b) => {
-      return new Date(b.create) - new Date(a.create);
-    })
-    .filter((item) => item.messages);
+  const data = [];
+  for (let i = 0; i < userMessage.length; i++) {
+    const infoMessage = await Messages.findById(userMessage[i]).populate({
+      path: "users",
+      populate: { path: "_id" },
+    });
+    if (infoMessage.messages.length === 0) {
+      continue;
+    }
 
-  res.status(200).json(msgs);
+    const users = infoMessage.users.filter(
+      (li) => li._id._id.toString() !== req.userId
+    );
+    const infoUser = users.map((li) => ({
+      avatar: li._id.avatar,
+      name: li._id.name,
+      connecting: li._id.connecting,
+    }));
+    const userIndex = infoMessage.users.findIndex(
+      (u) => u._id._id.toString() === req.userId.toString()
+    );
+    const d = {
+      ...infoMessage._doc,
+      users: infoUser,
+      messages:
+        infoMessage.messages[infoMessage.messages.length - 1]?.type !== "image"
+          ? infoMessage.messages[infoMessage.messages.length - 1].message
+          : "new image",
+      seend: infoMessage.users[userIndex].seen,
+    };
+    data.push(d);
+  }
+  const dataSort = data.sort((a, b) => {
+    return new Date(b.createAt) - new Date(a.createAt);
+  });
+  res.status(200).json(dataSort);
 };
 
 // get user
 exports.getUser = async (req, res) => {
   const userId = req.params.userId;
   const user = await User.findById(userId);
-
   res.status(200).json({
     avatar: user.avatar,
     userName: user.name,
@@ -140,7 +173,7 @@ exports.searchUser = async (req, res) => {
   const dataResponce = user
     .filter((u) => {
       const nameUser = formatName(u.name);
-      return nameUser.includes(name);
+      return nameUser.includes(name) && !u.deleted;
     })
     .map((u) => ({
       avatar: u.avatar,
@@ -160,10 +193,12 @@ exports.changeName = async (req, res) => {
   await user
     .save()
     .then((result) => {
-      res.status(200).json({ msg: "Success" });
+      res
+        .status(200)
+        .json({ msg: "The username has been successfully changed" });
     })
     .catch((err) => {
-      res.status(500).json({ msg: "Change new name failed" });
+      res.status(500).json({ msg: "The username changes failure" });
     });
 };
 
@@ -194,13 +229,13 @@ exports.changeAvatar = async (req, res) => {
     }
     await user.save().then(() => {
       res.status(201).json({
-        msg: "Success",
+        msg: "Change the avatar was successful",
         listAvatar: user.listAvatar,
         avatar: user.avatar,
       });
     });
   } catch (error) {
-    res.status(500).json({ msg: "Failure" });
+    res.status(500).json({ msg: "Changing the avatar has failed" });
   }
 };
 
@@ -265,4 +300,153 @@ exports.getAdmin = async (req, res) => {
     idUser: admin._id,
   };
   res.status(200).json(data);
+};
+exports.getAllUser = async (req, res) => {
+  const _id = req.userId;
+  const users = await User.find();
+
+  const data = users
+    .filter((user) => user._id.toString() !== _id)
+    .map((user) => ({ name: user.name, avatar: user.avatar, _id: user._id }));
+
+  res.status(200).json(data);
+};
+exports.getFriends = async (req, res) => {
+  const user = await User.findById(req.userId).populate({
+    path: "friends",
+    populate: { path: "_id" },
+  });
+  const data = user.friends.map((u) => ({
+    _id: u._id._id,
+    status: u.status,
+    createAt: u.createAt,
+    name: u._id.name,
+    avatar: u._id.avatar,
+  }));
+
+  res.status(200).json(data);
+};
+
+exports.addFriends = async (req, res) => {
+  const sendId = req.userId;
+  const receiverId = req.body._id;
+
+  if (sendId === receiverId)
+    return res
+      .status(403)
+      .json({ msg: "You cannot add yourself to your friends list" });
+
+  const userSend = await User.findById(sendId);
+  const val = userSend.friends.some((fr) => fr._id.toString() === receiverId);
+  if (val)
+    return res.status(403).json({
+      msg: "You cannot add users that are already in your friend list",
+    });
+
+  const userReceiver = await User.findById(receiverId);
+
+  userSend.friends.push({
+    _id: receiverId,
+    status: "waiting",
+    createAt: new Date(),
+    // notify: false,
+  });
+
+  userReceiver.friends.push({
+    _id: sendId,
+    status: "request",
+    createAt: new Date(),
+    // notify: true,
+  });
+  await userSend
+    .save()
+    .then(() => {
+      userReceiver.save().then(() => {
+        res
+          .status(200)
+          .json({ msg: `Sent a new friend request to ${userReceiver.name}` });
+      });
+      io.getIO()
+        .to(userReceiver.idSocket)
+        .emit("notify", {
+          action: "add-friend",
+          msg: `You receive a new friend request from ${userSend.name}`,
+        });
+    })
+    .catch((err) => res.status(500).json({ msg: "Some thing wrong!" }));
+};
+
+const accessFriend = (user, _id) => {
+  const data = user.friends;
+  const index = user.friends.findIndex((user) => user._id.toString() === _id);
+
+  data[index] = { createAt: data[index].createAt, status: "friends", _id: _id };
+
+  return data;
+};
+
+exports.accessAddFriend = async (req, res) => {
+  const idFriend = req.body._id;
+  const user = await User.findById(req.userId);
+  const userFriend = await User.findById(idFriend);
+  const data = accessFriend(user, idFriend);
+  const dataFriend = accessFriend(userFriend, req.userId);
+  user.friends = data;
+  userFriend.friends = dataFriend;
+
+  user
+    .save()
+    .then(() => {
+      userFriend.save().then(() => {
+        res.status(200).json({ msg: "You have accepted the friend request" });
+        io.getIO()
+          .to(userFriend.idSocket)
+          .emit("notify", {
+            action: "add-friend",
+            msg: ` ${userFriend.name} accepted the new friend request`,
+          });
+      });
+    })
+    .catch(() => res.status(501).json({ msg: "Some thing wrong!" }));
+};
+
+exports.refuseAddFriend = async (req, res) => {
+  const idFriend = req.body._id;
+  const user = await User.findById(req.userId);
+  const userFriend = await User.findById(idFriend);
+  const data = user.friends.filter((fr) => fr._id.toString() !== idFriend);
+  const dataFriend = userFriend.friends.filter(
+    (fr) => fr._id.toString() !== req.userId
+  );
+  user.friends = data;
+  userFriend.friends = dataFriend;
+  user
+    .save()
+    .then(() => {
+      userFriend.save().then(() => {
+        res.status(200).json({ msg: "You have declined the friend request" });
+      });
+    })
+    .catch(() => res.status(501).json({ msg: "Some thing wrong!" }));
+};
+exports.deleteFriend = async (req, res) => {
+  const idFriend = req.body._id;
+  const user = await User.findById(req.userId);
+  const userFriend = await User.findById(idFriend);
+  const data = user.friends.filter((fr) => fr._id.toString() !== idFriend);
+  const dataFriend = userFriend.friends.filter(
+    (fr) => fr._id.toString() !== req.userId
+  );
+  user.friends = data;
+  userFriend.friends = dataFriend;
+  user
+    .save()
+    .then(() => {
+      userFriend.save().then(() => {
+        res.status(200).json({
+          msg: `${userFriend.name} has been removed from your friend list`,
+        });
+      });
+    })
+    .catch(() => res.status(501).json({ msg: "Some thing wrong!" }));
 };

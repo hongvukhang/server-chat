@@ -1,12 +1,14 @@
-const User = require("../model/user");
+require("dotenv").config();
+
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
-require("dotenv").config();
+const User = require("../model/user");
+
 exports.getAllUser = async (req, res) => {
   const params = req.params;
   const query = req.query;
-  const user = await User.find();
+  const user = (await User.find()).filter((u) => !u.deleted);
   const responeUser = user.map((e) => ({
     _id: e._id,
     userName: e.userName,
@@ -72,16 +74,34 @@ exports.postLogin = async (req, res, next) => {
 };
 exports.deleteUser = async (req, res) => {
   const _id = req.params._id;
-  await User.findByIdAndDelete(_id)
-    .then((result) => {
-      res.status(201).json({ msg: "Delete the user successfully" });
-    })
-    .catch((err) => {
-      res.status(501).json({ msg: "Delete the user failed" });
-    });
+
+  if (_id === req.userId)
+    return res.status(403).json({ msg: "Can not delete yourself" });
+  // const user = await User.findById(req.body._id);
+  const user = await User.findById(_id);
+
+  if (user.userName === "admin")
+    return res.status(403).json({ msg: "Can not delete admin" });
+
+  await User.findOneAndUpdate(
+    { _id: _id },
+    {
+      avatar:
+        "https://firebasestorage.googleapis.com/v0/b/storage-images-89cf3.appspot.com/o/default-avatar.jpg?alt=media&token=33de296d-d422-4397-b14a-cf1490a8ea8a",
+      deleted: true,
+      email: "",
+    }
+  );
+  res.status(202).json({ msg: "Delete the user successfully" });
 };
 exports.isBanUser = async (req, res) => {
+  if (req.body._id === req.userId)
+    return res.status(403).json({ msg: "Can not ban yourself" });
+
   const user = await User.findById(req.body._id);
+  if (user.userName === "admin")
+    return res.status(403).json({ msg: "Can not ban admin" });
+
   user.baned = !user.baned;
   await user
     .save()
@@ -97,7 +117,12 @@ exports.isBanUser = async (req, res) => {
     });
 };
 exports.IsSetAdmin = async (req, res) => {
+  if (req.body._id === req.userId)
+    return res.status(403).json({ msg: "Can not set admin yourself" });
+
   const user = await User.findById(req.body._id);
+  if (user.userName === "admin")
+    return res.status(403).json({ msg: "Can not set admin for admin" });
   user.role = user.role === "admin" ? "user" : "admin";
   await user
     .save()
@@ -119,16 +144,17 @@ exports.IsSetAdmin = async (req, res) => {
 //Total message has not been read
 exports.getTotalMessages = async (req, res) => {
   const user = await User.findOne({ userName: "admin" }).populate("msgs");
-
   const data = user.msgs.filter((element) => {
-    return (
-      (element.idUser1._id.toString() === user._id.toString() &&
-        element.idUser1.seen === true &&
-        element.idUser2.seen === false) ||
-      (element.idUser2._id.toString() === user._id.toString() &&
-        element.idUser2.seen === true &&
-        element.idUser1.seen === false)
+    const val = element.users.some(
+      (u) => u._id.toString() === user._id.toString && !u.seen
     );
+    return val;
   });
   res.json(data);
+};
+exports.forgotPasswordAuth = async (req, res, next) => {
+  const user = await User.findOne({ userName: req.body.userName });
+  if (user.role !== "admin")
+    return res.status(403).json({ msg: "User name is not admin" });
+  next();
 };

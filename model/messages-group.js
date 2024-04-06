@@ -2,12 +2,11 @@ const mongoose = require("mongoose");
 
 const Schema = mongoose.Schema;
 
-const messageSchema = new Schema({
+const messageGroupSchema = new Schema({
   // _id: { type: mongoose.Types.ObjectId, require: true },
-
   users: [
     {
-      _id: { type: mongoose.Types.ObjectId, require: true, ref: "User" },
+      _id: { type: mongoose.Types.ObjectId, require: true, ref: "Users" },
       seen: { type: Boolean, require: true },
     },
   ],
@@ -22,4 +21,4 @@ const messageSchema = new Schema({
   ],
 });
 
-module.exports = mongoose.model("Messages", messageSchema);
+module.exports = mongoose.model("Messages", messageGroupSchema);

@@ -1,6 +1,6 @@
-const EmailAuth = require("../model/authentication-email");
 const User = require("../model/user");
 const { sendEmail } = require("../utils/sendEmail");
+const EmailAuth = require("../model/authentication-email");
 
 // Random otp
 function generateOTP() {
@@ -51,6 +51,17 @@ exports.emailAuth = async (req, res) => {
   }, 120000);
 };
 
+//middleware send otp register
+exports.sendOTPRegister = async (req, res, next) => {
+  const userEmail = await User.findOne({ email: req.body.email });
+  const userName = await User.findOne({ userName: req.body.userName });
+  if (userEmail || userName)
+    return res.status(405).json({
+      msg: `${userEmail ? "Email" : "User Name"} has been used!`,
+      title: "email",
+    });
+  next();
+};
 // get email otp forgot password
 exports.otpPassword = async (req, res) => {
   const userName = req.body.userName;

@@ -27,6 +27,14 @@ const userSchema = new Schema({
   createAt: { type: String, require: true },
   listAvatar: [{ type: String }],
   msgs: [{ type: mongoose.Types.ObjectId, ref: "Messages" }],
+  friends: [
+    {
+      _id: { type: mongoose.Types.ObjectId, ref: "User" },
+      status: { type: String },
+      createAt: { type: Date },
+    },
+  ],
+  deleted: { type: Boolean, require: false },
 });
 
 module.exports = mongoose.model("User", userSchema);

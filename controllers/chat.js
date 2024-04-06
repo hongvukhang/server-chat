@@ -1,6 +1,7 @@
-const Messages = require("../model/messages");
 const User = require("../model/user");
 const upload = require("../utils/upload");
+const Messages = require("../model/messages");
+
 exports.postIdSocket = async (req, res) => {
   const id = req.body.id;
   const user = await User.findById(req.userId);
@@ -32,38 +33,41 @@ exports.saveIdSocket = async (userName, idSocket) => {
       console.log(err);
     });
 };
-//save the message
-exports.saveMessage = async (idChat, receiver_id, msg, type) => {
-  const message = await Messages.findById(idChat);
-  message.createAt = new Date();
-  if (receiver_id.toString() === message.idUser1._id.toString()) {
-    message.idUser2.seen = false;
-    message.idUser1.seen = true;
-  } else {
-    message.idUser2.seen = true;
-    message.idUser1.seen = false;
-  }
 
+//save the message
+exports.saveMessage = async (idChat, _id, msg, type) => {
+  const message = await Messages.findById(idChat).populate({
+    path: "users",
+    populate: { path: "_id" },
+  });
+  message.createAt = new Date();
+
+  for (let i = 0; i < message.users.length; i++) {
+    if (message.users[i]._id._id.toString() === _id) {
+      message.users[i].seen = true;
+      continue;
+    }
+    message.users[i].seen = false;
+  }
   message.messages.push({
     type: type,
-    sender:
-      receiver_id.toString() === message.idUser1._id.toString()
-        ? message.idUser2._id
-        : message.idUser1._id,
+    sender: _id,
     message: msg,
     createAt: new Date(),
   });
   await message.save();
 
-  const user = await User.findById(receiver_id);
+  const idSockets = message.users
+    .filter((u) => u._id._id.toString() !== _id)
+    .map((u) => u._id.idSocket.toString());
 
-  return user.idSocket;
+  return idSockets;
 };
 
 exports.onSocket = async (socket, req, res) => {
   const id = req.body.id;
   const user = await User.findById();
-  console.log(id);
+
   user.idSocket = id;
   await user
     .save()
@@ -76,33 +80,35 @@ exports.onSocket = async (socket, req, res) => {
 };
 
 //save image message
-exports.saveImages = async (file) => {
+exports.saveImages = async (file, _id) => {
   const link = await upload.upload(file);
 
-  const message = await Messages.findById(file.idChat);
+  const message = await Messages.findById(file.idChat).populate({
+    path: "users",
+    populate: { path: "_id" },
+  });
   message.createAt = new Date();
-  if (file.receiver_id.toString() === message.idUser1._id.toString()) {
-    message.idUser2.seen = false;
-    message.idUser1.seen = true;
-  } else {
-    message.idUser2.seen = true;
-    message.idUser1.seen = false;
+  for (let i = 0; i < message.users.length; i++) {
+    if (message.users[i]._id._id.toString() === _id) {
+      message.users[i].seen = true;
+      continue;
+    }
+    message.users[i].seen = false;
   }
 
   message.messages.push({
     type: "image",
-    sender:
-      file.receiver_id.toString() === message.idUser1._id.toString()
-        ? message.idUser2._id
-        : message.idUser1._id,
+    sender: _id,
     message: link,
     createAt: new Date(),
   });
   await message.save();
 
-  const user = await User.findById(file.receiver_id);
+  const idSockets = message.users
+    .filter((u) => u._id._id.toString() !== _id)
+    .map((u) => u._id.idSocket.toString());
 
-  return user.idSocket;
+  return idSockets;
 };
 
 //disconnected user
